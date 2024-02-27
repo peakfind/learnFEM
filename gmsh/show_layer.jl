@@ -13,7 +13,16 @@ using Plots
 include(gmsh_jll.gmsh_api)
 
 """
-write a description of SimpleMesh
+    struct SimpleMesh
+    -------------------------------------------------------
+
+    np: the number of nodes 
+    nt: the number of elements
+    P:  the point matrix P is of size 3 x np (it depends on 
+        the dimension) and contains the tags and coordinates 
+        of all nodes 
+    T:  the connectivity matrix is of size 3 x nt and contains 
+        the tags of three nodes in each element
 """
 struct SimpleMesh
     P::Matrix{Float64}
@@ -21,7 +30,10 @@ struct SimpleMesh
 end
 
 """
-
+    function showmesh
+    -------------------------------------------------------
+     
+    plot the mesh described by struct SimpleMesh
 """
 function showmesh(mesh::SimpleMesh)
     np = size(mesh.P, 2)
@@ -59,13 +71,6 @@ gmsh.model.geo.synchronize()
 gmsh.model.mesh.generate(2)
 
 # extract mesh information from gmsh
-"""
-we may need the following apis in gmsh.jl
-
-gmsh.model.mesh.getNodes(dim, tag, boundary, paramet)
-gmsh.model.mesh.getElements(dim , tag)
-"""
-
 ndTags, ndCoord = gmsh.model.mesh.getNodes(-1, -1, false, false)
 elType, elTags, ndInEl = gmsh.model.mesh.getElements(2, -1)
 
