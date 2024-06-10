@@ -1,5 +1,39 @@
-using gmsh_jll
-include(gmsh_jll.gmsh_api)
+"""
+.geo script for grating
+
+lc = 1e-1;
+
+// Points
+Point(1) = {0, 0, 0, lc};
+Point(21) = {2*Pi, 0, 0, lc};
+Point(22) = {2*Pi, Pi, 0, lc};
+Point(23) = {0, Pi, 0, lc};
+
+// use points to approximate a sine curve
+h = 2*Pi/20.0;
+
+For i In {2:20}
+    Point(i) = {(i - 1)*h, Sin((i - 1)*h), 0, lc};
+EndFor
+
+// Lines
+Line(1) = {23, 1};
+
+For j In {2:23}
+    Line(j) = {j - 1, j};
+EndFor
+
+Periodic Curve {22} = {1};
+
+Curve Loop(1) = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 
+                 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 
+                 23};
+
+// Surface
+Plane Surface(1) = {1};
+"""
+
+using Gmsh
 
 gmsh.initialize()
 
