@@ -1,5 +1,5 @@
 """
-    pbc2_master.jl This file works on master branch
+    pbc2_master.jl -- This file works on master branch
     -------------------------------------------------------
     PROBLEMS:
                  Gammab
