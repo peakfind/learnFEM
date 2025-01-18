@@ -2,14 +2,14 @@
 .geo script for layer
 
                            Line(4)
-     P4(0,pi) ------------------------------- P3(2\pi,pi)
+     P4(0,pi) ------------------------------- P3(2π,π)
               |                             |
               |                             |
    Line(1)    |                             |  Line(3)
               |                             |
               |                             |
               |                             |
-      P1(0,0) ------------------------------- P2(2\pi,0)
+      P1(0,0) ------------------------------- P2(2π,0)
                            Line(2)
 // Elementary entity: point
 // A Point is uniquely identified by:
