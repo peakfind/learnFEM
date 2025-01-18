@@ -5,15 +5,19 @@
 # 
 # Author: Jiayi Zhang
 # Date:   17/01/2025
+# TODO: 1. periodic mesh in setup_grid()
+#       2. generate A and B
 =#
 
-using StaticArrays, Gmsh
+using Ferrite, FerriteGmsh
+using LinearAlgebra, SparseArrays, StaticArrays
+using Gmsh
 
 """
     setup_grid(d, n, b, lc)
     setup_grid(d, n, b, δ, lc, lp)
 
-Generate the mesh by julia interface for Gmsh
+Generate the mesh by julia interface for Gmsh and read the `.msh` file by `FerriteGmsh`
 
 # Arguments
 
@@ -26,6 +30,7 @@ Generate the mesh by julia interface for Gmsh
 - `lp`: target mesh size in the pml layer
 
 # Points
+
 ```
 n+4 ------------- n+3
  |                 |
@@ -35,6 +40,7 @@ n+2 ------------- n+1
 ```
 
 # Lines
+
 ```
  .  ---- n+4 ----  .
 n+5               n+3
@@ -42,6 +48,21 @@ n+5               n+3
 n+2                n 
  .  -- 1 ~ n-1 --  .
 ```
+
+# Examples
+```julia
+d=2*pi, n=10, b=2
+setup_grid(2*pi, 10, 2)
+```
+
+```julia
+d=2*pi, n=10, b=2, δ=0.5
+setup_grid(2*pi, 20, 2, 0.5)
+```
+
+# Misc 
+
+- We can generate a `*.vtk` file by replace the `do end` block with `gmsh.write(*.vtk)`
 """
 function setup_grid(d, n, b, lc=0.5)
     h = d/(n-1)
@@ -127,16 +148,111 @@ function setup_grid(d, n, b, δ, lc=0.5, lp=0.1)
     domain = gmsh.model.geo.addPlaneSurface([lp1])
     pml = gmsh.model.geo.addPlaneSurface([lp2])
 
-    # Generate the vtk file
+    # Synchronize the model
     gmsh.model.geo.synchronize()
+
+    # Generate a 2D mesh
     gmsh.model.mesh.generate(2)
-    # gmsh.write("pml.msh")
-    gmsh.write("pml.vtk")
+
+    grid = mktempdir() do dir
+        path = joinpath(dir, "mesh.msh")
+        gmsh.write(path)
+        togrid(path) 
+    end
+
+    # Finalize the Gmsh library
     gmsh.finalize()
+
+    return grid
 end
 
-# d=2*pi, n=10, b=2
-# setup_grid(2*pi, 10, 2)
+function setup_fevs(interpolation)
+    qr = QuadratureRule{RefTriangle}(2)
+    cellvalues = CellValues(qr, interpolation)
+    return cellvalues
+end
 
-# d=2*pi, n=10, b=2, δ=0.5
-setup_grid(2*pi, 50, 2, 0.5)
+function setup_dofs(grid::Grid, interpolation)
+    dh = DofHandler(grid)
+    add!(dh, :u, interpolation)
+    close!(dh)
+    return dh
+end
+
+function setup_bdcs(dofhandler::DofHandler)
+    csthandler = ConstraintHandler(dofhandler)
+    # Set periodic boundary condition
+    periodic_faces = collect_periodic_facets(dofhandler.grid, "Gamma1", "Gamma2", x -> x + Vec{2}((1.0, 0.0)))
+    pbc = PeriodicDirichlet(:u, periodic_faces)
+    add!(csthandler, pbc)
+    close!(csthandler)
+    return csthandler
+end
+
+function allocate_matries(dofhandler::DofHandler, csthandler::ConstraintHandler)
+    sp = init_sparsity_pattern(dofhandler)
+    add_cell_entries!(sp, dofhandler)
+    add_constraint_entries!(sp, csthandler)
+    M = allocate_matrix(SparseMatrixCSC{ComplexF64, Int}, sp)
+    return M
+end
+
+"""
+    get_dispersion(cellvalues, dofhandler, csthandler, A, B, qm, neigs)
+
+Formulate the general eigenvalue problem (GEP) 
+```
+    A(α)x = k^2 Bx
+``` 
+by FEM and solve it by `Arpack`
+
+# Arguments
+
+- `A`: the matrix `A(α)` in the GEP
+- `B`: the matrix `B` in the GEP
+- `qm`: the quasimomentum
+- `neigs`: the number of the eigenvalues we want to compute (needed by `Arpack`)
+
+# Steps
+
+1. Fix `α` (entries in `qm`)
+2. Assemble matrices `A` (resp. `B`) by the function `assemble_a()` (resp. `assemble_b`)
+3. solve the eigenvalue problem
+"""
+function get_dispersion(cellvalues::CellValues, dofhandler::DofHandler, 
+                        csthandler::ConstraintHandler, A::SparseMatrixCSC, 
+                        B::SparseMatrixCSC, qm, neigs)
+    
+end
+
+function assemble_a()
+    
+end
+
+function assemble_b()
+end
+
+
+
+function main()
+    grid = setup_grid(2*pi, 20, 2, 0.5)
+
+    # Define the interpolation: linear lagrange
+    ip = Lagrange{RefTriangle, 1}()
+
+    cv = setup_fevs(ip)
+    dh = setup_dofs(grid, ip)
+    ch = setup_bdcs(dh)
+
+    # Allocate the matrices
+    A = allocate_matrices(dh, ch)
+    B = allocate_matrices(dh, ch)
+
+    # Brillouin zone α
+    # α = 
+
+    # 
+
+    # Plot the dispersion curves
+
+end
