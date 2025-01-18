@@ -25,3 +25,6 @@ Manifest.toml
 
 # MACOS system file
 .DS_Store
+
+# vtk files
+*.vtk
