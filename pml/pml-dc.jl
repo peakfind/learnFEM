@@ -5,8 +5,7 @@
 # 
 # Author: Jiayi Zhang
 # Date:   17/01/2025
-# TODO: 1. periodic mesh in setup_grid()
-#       2. generate A and B
+# 
 =#
 
 using Ferrite, FerriteGmsh
@@ -47,6 +46,9 @@ Generate the mesh by julia interface for Gmsh and read the `.msh` file by `Ferri
 # Points
 
 ```
+n+2 ------------- n+1
+ |                 |
+ 1  -------------  n
 ```
 and
 ```
@@ -60,6 +62,9 @@ n+2 ------------- n+1
 # Lines
 
 ```
+ .  ---- n+1 ----  .
+n+2                n 
+ .  -- 1 ~ n-1 --  .
 ```
 and
 ```
@@ -103,35 +108,34 @@ function setup_grid(d, n, b, lc=0.5)
         points[i] = gmsh.model.geo.addPoint((i-1)*h, sin((i-1)*h), 0, lc) 
     end
 
-    points[end-1] = gmsh.model.geo.addPoint(d, b, 0, lc) 
-    points[end] = gmsh.model.geo.addPoint(0, b, 0, lc)
+    points[n+1] = gmsh.model.geo.addPoint(d, b, 0, lc) 
+    points[n+2] = gmsh.model.geo.addPoint(0, b, 0, lc)
 
     # Add the lines
-    lines = @MVector zeros(Int32, n+5)
+    lines = @MVector zeros(Int32, n+2)
 
     for i in 1:n+1
         lines[i] = gmsh.model.geo.addLine(points[i], points[i+1])
     end
 
-    lines[end] = gmsh.model.geo.addLine(points[end], points[1])
+    lines[n+2] = gmsh.model.geo.addLine(points[n+2], points[1])
 
-    # Add the loop
+    # Add the loop and the surface
     loop = gmsh.model.geo.addCurveLoop(lines)
-
-    # Add the surface
     surf = gmsh.model.geo.addPlaneSurface([loop])
 
+    # Synchronize the model
     gmsh.model.geo.synchronize()
 
     # Create the Physical Groups
-    gmsh.model.addPhysicalGroup(1, [lines[end-1]], -1, "Top")
-    gmsh.model.addPhysicalGroup(1, [lines[end]], -1, "Left")
-    gmsh.model.addPhysicalGroup(1, [lines[end-2]], -1, "Right")
+    gmsh.model.addPhysicalGroup(1, [lines[n+1]], -1, "Top")
+    gmsh.model.addPhysicalGroup(1, [lines[n+2]], -1, "Left")
+    gmsh.model.addPhysicalGroup(1, [lines[n-1]], -1, "Right")
     gmsh.model.addPhysicalGroup(2, [surf], -1, "Omega")
 
     # Set periodic mesh
     transform = @SVector [1, 0, 0, d, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
-    gmsh.model.mesh.setPeriodic(1, [rb], [lb], transform)
+    gmsh.model.mesh.setPeriodic(1, [lines[n]], [lines[n+2]], transform)
 
     # Generate a 2D mesh
     gmsh.model.mesh.generate(2)
@@ -233,7 +237,7 @@ end
 function setup_bdcs(dofhandler::DofHandler)
     csthandler = ConstraintHandler(dofhandler)
 
-    # Set periodic boundary condition
+    # Set periodic boundary condition on the "Right" and "Left"
     periodic_faces = collect_periodic_facets(dofhandler.grid, "Right", "Left", x -> x + Vec{2}((2*pi, 0.0)))
     pbc = PeriodicDirichlet(:u, periodic_faces)
     add!(csthandler, pbc)
