@@ -2,6 +2,7 @@
 # pml-dc.jl
 #
 # Use PML to truncate the unbounded domain.
+# Compute the eigenvalues of smallest magnitude.
 # 
 # Author: Jiayi Zhang
 # Date:   21/01/2025
