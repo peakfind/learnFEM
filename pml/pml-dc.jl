@@ -4,8 +4,7 @@
 # Use PML to truncate the unbounded domain.
 # 
 # Author: Jiayi Zhang
-# Date:   17/01/2025
-# 
+# Date:   21/01/2025
 =#
 
 using Ferrite, FerriteGmsh
@@ -75,7 +74,7 @@ function setup_grid(d, n, b, lc=0.5)
 
     # Add the points
     # Use a polyline to approximate the profile
-    points = @MVector zeros(Int32, n+2)
+    points = zeros(Int32, n+2)
 
     points[1] = gmsh.model.geo.addPoint(0, 0, 0, lc)
     points[n] = gmsh.model.geo.addPoint(d, 0, 0, lc)
@@ -88,7 +87,7 @@ function setup_grid(d, n, b, lc=0.5)
     points[n+2] = gmsh.model.geo.addPoint(0, b, 0, lc)
 
     # Add the lines
-    lines = @MVector zeros(Int32, n+2)
+    lines = zeros(Int32, n+2)
 
     for i in 1:n+1
         lines[i] = gmsh.model.geo.addLine(points[i], points[i+1])
@@ -117,7 +116,7 @@ function setup_grid(d, n, b, lc=0.5)
     # Generate a 2D mesh
     gmsh.model.mesh.generate(2)
     grid = mktempdir() do dir
-        path = joinpath(pwd(), "mesh.msh")
+        path = joinpath(dir, "mesh.msh")
         gmsh.write(path)
         togrid(path) 
     end
@@ -257,7 +256,6 @@ function assemble_b(cellvalues::CellValues, B::SparseMatrixCSC, dofhandler::DofH
         # Reinitialize cellvalues for this cell
         reinit!(cellvalues, cell)
         fill!(Be, 0)
-
         coords = getcoordinates(cell)
         
         for qp in 1:getnquadpoints(cellvalues)
@@ -277,8 +275,6 @@ function assemble_b(cellvalues::CellValues, B::SparseMatrixCSC, dofhandler::DofH
 
     return B
 end
-
-
 
 function main()
     d = 2*pi
@@ -301,12 +297,13 @@ function main()
     # Brillouin zone α
     α = collect(range(-pi/d, pi/d, 80))
 
-    #
+    # Solve the eigenvalue problem
     k = get_dispersion(cv, dh, ch, A, B, α, 5)
 
     # Plot the dispersion curves
-    # plot(α, real(k), legend=false)
-    plot(α, imag(k), legend=false)
+    p1 = plot(α, real(k), title = "Real part")
+    p2 = plot(α, imag(k), title = "Imaginary part")
+    plot(p1, p2, layout = (1, 2), legend = false)
 end
 
 main()
