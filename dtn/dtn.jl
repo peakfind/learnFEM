@@ -1,3 +1,11 @@
+#=
+# dtn.jl
+# 
+# Provide a framework for the DtN-FEM 
+# 
+# Author: Jiayi Zhang
+# Date: 23/01/2025
+=#
 using Gmsh, Ferrite, FerriteGmsh, SparseArrays
 
 # The incident field
@@ -13,16 +21,6 @@ function Incident(k, θ)
     β = k*cos(θ)
     Incident(k, θ, α, β)
 end
-
-#=
-function q(x::Vec{2, T}) where {T}
-    if x[2] > 1.0 
-        return 1.0
-    else
-        return 2.0
-    end
-end
-=#
 
 # Generate the mesh by Gmsh
 function setup_grid(height, lc=0.05)
@@ -101,7 +99,7 @@ function setup_bcs(dofhandler::DofHandler)
     return ch
 end
 
-# TODO: Maybe find a more elegant way to extract dofs on DtN
+# TODO: Maybe find a more elegant way to extract the dofs on DtN
 function dofs_on_dtn(dofhandler::DofHandler, field::Symbol, facetset)
     dtn_ch = ConstraintHandler(dofhandler)
     dbc = Dirichlet(field, facetset, x -> 0)
@@ -173,14 +171,8 @@ function doassemble(cellvalues::CellValues, facetvalues::FacetValues, K::SparseM
     return K, f
 end
 
-# function tbc_matrix(truc, dofs)
-#    # Preallocate the TBC matrix
-#    K = spzeros(ComplexF64, dofs, dofs)
-    
-#    K[] = 
-    
-#    return K
-#end
+function tbc_matrix(truc, dofs)
+end
 
 function main()
     # Setup the grid
@@ -210,21 +202,25 @@ function main()
     f = zeros(ComplexF64, ndofs(dh))
 
     # Assemble the stiffness matrix (do not contain the DtN term) and the load vector
-    # Note that the DtN term is computed on global level
+    # Note that the DtN term should be computed on global level
     K,f = doassemble(cv, fv, K, f, dh, inc.α, inc.β, 10.0)
+
     # apply the DtN term
     # K_tbc = tbc_matrix()
     # K .-= K_tbc;
+
+    # Apply the constraints
     apply!(K, f, ch)
+
     u = K \ f;
     apply!(u, ch)
     
     # Write to .vtk file
-    VTKFile("real_u", grid) do vtk
+    VTKGridFile("real_u", dh) do vtk
         write_solution(vtk, dh, real(u))
     end
-    VTKFile("imag_u", grid) do vtk
-        write_solution(vtk, dh, imag(u))
+    VTKGridFile("imag_u", dh) do vtk
+        write_solution(vtk, dh, u)
     end
 end
 
