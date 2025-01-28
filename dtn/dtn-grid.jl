@@ -84,7 +84,7 @@ function allocate_stiff_matrix(dofhandler::DofHandler, csthandler::ConstraintHan
     return K
 end
 
-function main()
+function show_sp()
     grid = setup_grid()
     ip = Lagrange{RefTriangle, 1}()
     dh = setup_dofs(grid, ip)
@@ -94,4 +94,27 @@ function main()
     return K
 end
 
-main()
+"""
+    manipulating_grid()
+When we get our `grid`, we can use the following functions to investigate the data structure of `grid`:
+```julia-repl
+julia> grid = setup_grid() # function defined by user to generate the grid
+julia> grid.nodes
+julia> grid.cells 
+julia> grid.cellsets
+julia> grid.facetsets
+```
+
+After we setup the Dof Handler, we can investigate the structure of dofs.
+```julia-repl
+julia> ip = Lagrange{RefTriangle, 1}()
+julia> dh = setup_dofs(grid, ip)
+julia> dh.cell_dofs
+julia> dh.cell_dofs_offset
+```
+`dh.cell_dofs` contains all the dofs. But it also contains repeated labels.
+`dh.cell_dofs_offset` can help us extract dofs from `dh.cell_dofs`.
+"""
+function manipulating_grid()
+end
+
