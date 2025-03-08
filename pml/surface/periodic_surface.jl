@@ -84,16 +84,11 @@ function setup_grid(lc=0.5)
     # Generate a 2D mesh
     gmsh.model.mesh.generate(2)
 
-    # grid = mktempdir() do dir
-    #     path = joinpath(dir, "mesh.msh")
-    #     gmsh.write(path)
-    #     togrid(path) 
-    # end
-    msh_path = joinpath(pwd(), "surface.msh")
-    vtk_path = joinpath(pwd(), "surface.vtk")
-    gmsh.write(msh_path)
-    gmsh.write(vtk_path)
-    grid = togrid(msh_path)
+    grid = mktempdir() do dir
+        path = joinpath(dir, "mesh.msh")
+        gmsh.write(path)
+        togrid(path) 
+    end
 
     # Finalize the Gmsh library
     gmsh.finalize()
@@ -125,8 +120,8 @@ function setup_bdcs(dh::DofHandler, k, θ)
     # Set Dirichlet boundary condition on the "bottom" and "top"
     dbc_top = Dirichlet(:u, getfacetset(dh.grid, "top"), x -> 0.0 + 0.0im)
     add!(cst, dbc_top)
-    dbc_bottom = Dirichlet(:u, getfacetset(dh.grid, "bottom"), x -> -uⁱ(x[2], k, θ))
-    # dbc_bottom = Dirichlet(:u, getfacetset(dh.grid, "bottom"), x -> 0.5)
+    # dbc_bottom = Dirichlet(:u, getfacetset(dh.grid, "bottom"), x -> -uⁱ(x[2], k, θ))
+    dbc_bottom = Dirichlet(:u, getfacetset(dh.grid, "bottom"), x -> 0.0 + 1.0im)
     add!(cst, dbc_bottom)
 
     close!(cst)
@@ -190,5 +185,3 @@ function assemble_local!(cv::CellValues, cache::CellCache, Ae::Matrix, k, α)
 
     return Ae
 end
-
-

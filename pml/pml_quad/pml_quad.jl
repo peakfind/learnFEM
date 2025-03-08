@@ -72,7 +72,7 @@ function setup_bdcs(dof::DofHandler, d)
 
     # Set Dirichlet boundary condition on the "bottom" and "top"
     dfacets = union(getfacetset(dof.grid, "bottom"), getfacetset(dof.grid, "top"))
-    dbc = Dirichlet(:u, dfacets, x -> 0)
+    dbc = Dirichlet(:u, dfacets, x -> 0.0)
     add!(cst, dbc)
 
     close!(cst)
@@ -135,7 +135,7 @@ function assemble_A1(cv::CellValues, dof::DofHandler, A₁::SparseMatrixCSC)
                 v = shape_value(cv, qp, i)
                 for j in 1:ndofs_c 
                     grad_u = shape_gradient(cv, qp, j)
-                    Loc[i, j] += (-2im * s * grad_u[1] * v) * dx
+                    Loc[i, j] += (2im * s * grad_u[1] * v) * dx
                 end
             end
         end

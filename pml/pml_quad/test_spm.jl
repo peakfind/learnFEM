@@ -2,7 +2,7 @@ using Gmsh
 using Ferrite, FerriteGmsh
 using SparseArrays
 using NonlinearEigenproblems
-using Plots
+# using Plots
 
 include("pml_quad.jl")
 
@@ -36,7 +36,7 @@ apply!(A₁, f₁, ch)
 apply!(A₂, f₂, ch)
 
 # Set NEP 
-qep = PEP([A₀, A₁, A₂])
+qep = PEP([A₀, -A₁, A₂])
 λ,_ = polyeig(qep)
-# filter!(e -> is_real(e), λ)
+filter!(e -> is_real(e), λ)
 @show λ
