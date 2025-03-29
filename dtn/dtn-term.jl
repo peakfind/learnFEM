@@ -30,7 +30,7 @@ close!(dh)
 dofsDtN = dofs_on_dtn(dh, :u, getfacetset(grid, "top"))
 Θ = sparsevec(dofsDtN, zeros(ComplexF64, length(dofsDtN)))
 
-# Compute Θⁿ for n = 0
+# Compute Θⁿ for n = 1
 # Allocate the local vector θ
 n = getnbasefunctions(fv)
 θ = zeros(ComplexF64, n)
