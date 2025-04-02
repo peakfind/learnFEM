@@ -1,4 +1,5 @@
-using Gmsh, Ferrite, FerriteGmsh, SparseArrays
+# dtn.jl
+# Provide a framework for the DtN-FEM 
 
 # The incident field
 struct Incident
@@ -11,29 +12,43 @@ end
 function Incident(k, θ)
     α = k*sin(θ)
     β = k*cos(θ)
-    Incident(k, θ, α, β)
+    return Incident(k, θ, α, β)
 end
 
-#=
-function q(x::Vec{2, T}) where {T}
-    if x[2] > 1.0 
-        return 1.0
+function get_alpha(inc::Incident)
+    return inc.α
+end
+
+function get_beta(inc::Incident)
+    return inc.β
+end
+
+function beta_n(inc::Incident, n)
+    αₙ = inc.α + n
+    
+    if k > abs(αₙ) 
+        βₙ = Complex(sqrt(k^2 - αₙ^2))
     else
-        return 2.0
+        βₙ = im * sqrt(αₙ^2 - k^2)
     end
+    
+    return βₙ
 end
-=#
 
-# Generate the mesh by Gmsh
-function setup_grid(height, lc=0.05)
+"""
+    periodic_cell(lc=0.05; height)
+
+Generate a mesh for the periodic cell with period 2π.
+"""
+function periodic_cell(lc=0.05; height)
     # Initialize gmsh
     gmsh.initialize()
     gmsh.option.setNumber("General.Verbosity", 2)
 
     # Add the points
     p1 = gmsh.model.geo.addPoint(0, 0, 0, lc)
-    p2 = gmsh.model.geo.addPoint(2*pi, 0, 0, lc)
-    p3 = gmsh.model.geo.addPoint(2*pi, height, 0, lc)
+    p2 = gmsh.model.geo.addPoint(2π, 0, 0, lc)
+    p3 = gmsh.model.geo.addPoint(2π, height, 0, lc)
     p4 = gmsh.model.geo.addPoint(0, height, 0, lc)
 
     # Add the lines
@@ -50,21 +65,23 @@ function setup_grid(height, lc=0.05)
     gmsh.model.geo.synchronize()
 
     # Create the physical domains (for boundary conditions)
-    gmsh.model.addPhysicalGroup(1, [l1], -1, "Gamma") 
-    gmsh.model.addPhysicalGroup(1, [l2], -1, "Gamma1")
-    gmsh.model.addPhysicalGroup(1, [l3], -1, "Gammab")
-    gmsh.model.addPhysicalGroup(1, [l4], -1, "Gamma2")
-    gmsh.model.addPhysicalGroup(2, [surf], -1, "Omegab")
+    gmsh.model.addPhysicalGroup(1, [l1], -1, "bottom") 
+    gmsh.model.addPhysicalGroup(1, [l2], -1, "right")
+    gmsh.model.addPhysicalGroup(1, [l3], -1, "top")
+    gmsh.model.addPhysicalGroup(1, [l4], -1, "left")
+    gmsh.model.addPhysicalGroup(2, [surf], -1, "Ω")
 
     # Set Periodic boundary condition
-    gmsh.model.mesh.setPeriodic(1, [l2], [l4], [1, 0, 0, 2*pi, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+    gmsh.model.mesh.setPeriodic(1, [l2], [l4], [1, 0, 0, 2π, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
     # Generate a 2D mesh
     gmsh.model.mesh.generate(2)
 
     # Save the mesh and read the .msh file in Ferrite
-    path = joinpath(pwd(), "layer.msh")
-    gmsh.write(path)
-    grid = togrid(path)
+    grid = mktempdir() do dir 
+        path = joinpath(dir, "mesh.msh")
+        gmsh.write(path)
+        togrid(path)
+    end
 
     # Finalize the Gmsh library
     gmsh.finalize()
@@ -72,6 +89,7 @@ function setup_grid(height, lc=0.05)
     return grid
 end
 
+# setup cellvalues and facetvalues
 function setup_vals(interpolation)
     qr = QuadratureRule{RefTriangle}(2)
     qr_facet = FacetQuadratureRule{RefTriangle}(2)
@@ -80,6 +98,7 @@ function setup_vals(interpolation)
     return cellvalues, facetvalues
 end
 
+# Same as the setup_dof in fem/setups.jl
 function setup_dofs(grid::Grid, interpolation)
     dh = DofHandler(grid)
     add!(dh, :u, interpolation)
@@ -89,19 +108,20 @@ end
 
 function setup_bcs(dofhandler::DofHandler) 
     ch = ConstraintHandler(dofhandler)
+
     # Periodic boundary condition
-    periodic_faces = collect_periodic_facets(dofhandler.grid, "Gamma1", "Gamma2", x -> x + Vec{2}((2*pi, 0.0)))
+    periodic_faces = collect_periodic_facets(dofhandler.grid, "right", "left", x -> x + Vec{2}((2π, 0.0)))
     pbc = PeriodicDirichlet(:u, periodic_faces)
     add!(ch, pbc)
+
     # Dirichlet boundary condition
-    # dirichlet_faces = union(getfacetset(dofhandler.grid, "Gamma"), getfacetset(dofhandler.grid, "Gammab"))
-    dbc = Dirichlet(:u, getfacetset(dofhandler.grid, "Gamma"), x -> 0)
+    dbc = Dirichlet(:u, getfacetset(dofhandler.grid, "bottom"), x -> 0)
     add!(ch, dbc)
     close!(ch)
     return ch
 end
 
-# TODO: Maybe find a more elegant way to extract dofs on DtN
+# TODO: Maybe find a more elegant way to extract the dofs on DtN
 function dofs_on_dtn(dofhandler::DofHandler, field::Symbol, facetset)
     dtn_ch = ConstraintHandler(dofhandler)
     dbc = Dirichlet(field, facetset, x -> 0)
@@ -115,117 +135,163 @@ function allocate_stiff_matrix(dofhandler::DofHandler, csthandler::ConstraintHan
     add_cell_entries!(sp, dofhandler)
     # Use add_entry! for DtN term
     for i in dofs, j in dofs
-        if abs(i - j) > 1
+        # if abs(i - j) > 1
             Ferrite.add_entry!(sp, i, j)
-        end
+        # end
     end
     add_constraint_entries!(sp, csthandler)
     K = allocate_matrix(SparseMatrixCSC{ComplexF64, Int}, sp)
     return K
 end
 
-function doassemble(cellvalues::CellValues, facetvalues::FacetValues, K::SparseMatrixCSC, f, dh::DofHandler, alpha, beta, b)
-    ndofs_c = ndofs_per_cell(dh) 
-    assembler = start_assemble(K, f)
+function assemble_A(cv::CellValues, dh::DofHandler, A::SparseMatrixCSC, inc::Incident)
+    α = get_alpha(inc)
+    # Allocate the local stiffness matrix
+    n_basefuncs = getnbasefunctions(cv)
+    Ae = zeros(ComplexF64, n_basefuncs, n_basefuncs)
     
-    # Preallocate the local stiffness matrix and local load vector
-    Ke = zeros(ComplexF64, ndofs_c, ndofs_c)
-    fe = zeros(ComplexF64, ndofs_c)
+    # Create an assembler A
+    assembler = start_assemble(A)
     
+    # Loop over all cells 
     for cell in CellIterator(dh)
-        # Reinitialize cellvalues for this cell
-        reinit!(cellvalues, cell)
-        fill!(Ke, 0)
-        # coords = getcoordinates(cell)
-
-        for qp in 1:getnquadpoints(cellvalues)
-            dx = getdetJdV(cellvalues, qp)
-            # coords_qp = spatial_coordinate(cellvalues, qp, coords)
-            # ri = q(coords_qp)
-            for i in 1:ndofs_c
-                v = shape_value(cellvalues, qp, i)
-                grad_v = shape_gradient(cellvalues, qp, i)
-                for j in 1:ndofs_c
-                    u = shape_value(cellvalues, qp, j)
-                    grad_u = shape_gradient(cellvalues, qp, j)
-                    Ke[i, j] += (dot(grad_u, grad_v) - (im*2*alpha*grad_u[1]*v) - (beta^2)*u*v) * dx  
+        # Reinitialize cellvalues for current cell 
+        reinit!(cv, cell)
+        # Reset local stiffness matrix to 0.0 + 0.0im
+        fill!(Ae, 0.0 + 0.0im)
+        
+        # Loop over quadrature points 
+        for qp in 1:getnquadpoints(cv)
+            dx = getdetJdV(cv, qp)
+            
+            # Loop over test shape functions
+            for i in 1:n_basefuncs
+                v = shape_value(cv, qp, i)
+                ∇v = shape_gradient(cv, qp, i)
+                
+                # Loop over trial shape functions
+                for j in 1:n_basefuncs
+                    u = shape_value(cv, qp, j)
+                    ∇u = shape_gradient(cv, qp, j)
+                    
+                    # Assemble the local stiffness matrix
+                    Ae[i, j] += (∇u ⋅ ∇v - 2im * α * ∇u[1] * v - (k^2 - α^2) * u * v) * dx
                 end
             end
         end
-        assemble!(assembler, celldofs(cell), Ke)
-    end
 
-    for facet in FacetIterator(dh, getfacetset(dh.grid, "Gammab"))
-        # Reinitialize facetvalues for this cell
-        reinit!(facetvalues, facet)
-        fill!(fe, 0)
+        # Assemble Ae into A
+        assemble!(assembler, celldofs(cell), Ae)
+    end
+    
+    return A
+end
+
+function assemble_load(fv::FacetValues, dh::DofHandler, facetset, f, inc::Incident, height)
+    β = get_beta(inc)
+    # Allocate the local load vector fe
+    n_basefuncs = getnbasefunctions(fv)
+    fe = zeros(ComplexF64, n_basefuncs)
+    
+    # Loop over all facets on the specific facetset
+    for facet in FacetIterator(dh, facetset)
+        # Update the fv to the correct facet
+        reinit!(fv, facet)
         
-        for qp in 1:getnquadpoints(facetvalues)
-            ds = getdetJdV(facetvalues, qp)
-            for i in 1:getnbasefunctions(facetvalues)
-                v = shape_value(facetvalues, qp, i)
-                fe[i] += (-2*im*beta*exp(-im*beta*b))*v*ds
+        # Reset the local vector fe to zero
+        fill!(fe, 0.0 + 0.0im)
+        
+        # Loop over quadrature points
+        for qp in 1:getnquadpoints(fv)
+            ds = getdetJdV(fv, qp)
+            
+            # right hand side due to the incident field
+            g = -2im * β * exp(-im * β * height)
+            
+            # Loop over test functions
+            for i in 1:n_basefuncs
+                v = shape_value(fv, qp, i)
+                fe[i] += g * v * ds
             end
         end
         assemble!(f, celldofs(facet), fe)
     end
-
-    return K, f
+    
+    return f
 end
 
-# function tbc_matrix(truc, dofs)
-#    # Preallocate the TBC matrix
-#    K = spzeros(ComplexF64, dofs, dofs)
+function assemble_tbc(fv::FacetValues, dh::DofHandler, inc::Incident, facetset, F, N, dofsDtN)
+    # Allocate the vector Θ 
+    Θ = sparsevec(dofsDtN, zeros(ComplexF64, length(dofsDtN)), ndofs(dh))
     
-#    K[] = 
-    
-#    return K
-#end
+    # Loop over truncated terms
+    for n in -N:N 
+        # Reset the vector Θ to zero
+        fill!(Θ, 0.0 + 0.0im)
 
-function main()
-    # Setup the grid
-    grid = setup_grid(5.0, 0.3)
-    
-    # Setup the parameters:k = 1.0, θ = pi/3, N = 15
-    inc = Incident(1.0, pi/3)
-    N = 15
+        # Compute βₙ
+        βₙ = beta_n(inc, n)
 
-    # Interpolation and quadrature rules
-    ip = Lagrange{RefTriangle, 1}()
-
-    # Set the FE values
-    cv, fv = setup_vals(ip)
-
-    # Set the DofHandlers
-    dh = setup_dofs(grid, ip)
-
-    # Set the boundary conditions
-    ch = setup_bcs(dh)
-
-    # Extract the dofs related with DtN term
-    dofs_dtn = dofs_on_dtn(dh, :u, getfacetset(grid, "Gammab"))
-
-    # Allocate the stiffness matrix and the load vector
-    K = allocate_stiff_matrix(dh, ch, dofs_dtn)
-    f = zeros(ComplexF64, ndofs(dh))
-
-    # Assemble the stiffness matrix (do not contain the DtN term) and the load vector
-    # Note that the DtN term is computed on global level
-    K,f = doassemble(cv, fv, K, f, dh, inc.α, inc.β, 10.0)
-    # apply the DtN term
-    # K_tbc = tbc_matrix()
-    # K .-= K_tbc;
-    apply!(K, f, ch)
-    u = K \ f;
-    apply!(u, ch)
-    
-    # Write to .vtk file
-    VTKFile("real_u", grid) do vtk
-        write_solution(vtk, dh, real(u))
+        # Compute the vector Θ (Fourier coefficients and its conjugate) 
+        compute_coef!(fv, dh, facetset, Θ, n)
+        
+        # 
+        for i in Θ.nzind, j in Θ.nzind
+            v = im * βₙ * Θ[i] * conj(Θ[j])/(2π)
+            Ferrite.addindex!(F, v, i, j)
+        end
     end
-    VTKFile("imag_u", grid) do vtk
-        write_solution(vtk, dh, imag(u))
-    end
+    
+    # F .*= im/(2π)
+    
+    return F
 end
 
-main()
+"""
+    compute_coef!(fv::FacetValues, dh::DofHandler, facetset, Θ::SparseVector, n)
+
+Compute Θⁿ on the `facetset`.
+"""
+function compute_coef!(fv::FacetValues, dh::DofHandler, facetset, Θ::SparseVector, n)
+    # Allocate the local vector θ
+    n_basefuncs = getnbasefunctions(fv)
+    θ = zeros(ComplexF64, n_basefuncs)
+    
+    # Loop over all facets on the specific facetset
+    for facet in FacetIterator(dh, facetset)
+        # Update the fv to the correct facet
+        reinit!(fv, facet)
+        
+        # Reset the local vector θ to zero
+        fill!(θ, 0.0 + 0.0im)
+        
+        coords = getcoordinates(facet)
+        
+        # Loop over quadrature points
+        for qp in 1:getnquadpoints(fv)
+            ds = getdetJdV(fv, qp)
+
+            # Coordinate of the quadrature point
+            coords_qp = spatial_coordinate(fv, qp, coords)
+            
+            # Modes: eⁱⁿˣ
+            mode = exp(im * n * coords_qp[1])
+            
+            for i in 1:n_basefuncs
+                ϕ = shape_value(fv, qp, i)
+                θ[i] += ϕ * mode * ds
+            end
+        end
+        assemble!(Θ, celldofs(facet), θ)
+    end
+    
+    return Θ
+end
+
+function sub_preserve_structure(A::SparseMatrixCSC, B::SparseMatrixCSC)
+    if A.colptr != B.colptr || A.rowval != B.rowval || size(A) != size(B)
+        error("Matrices must have the same sparsity structure and dimensions.")
+    end
+    new_nzval = A.nzval - B.nzval
+    return SparseMatrixCSC(size(A,1), size(A,2), A.colptr, A.rowval, new_nzval)
+end
