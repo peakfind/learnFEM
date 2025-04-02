@@ -12,28 +12,29 @@ function dofs_on_dtn(dofhandler::DofHandler, field::Symbol, facetset)
 end
 
 # Generate a uniform mesh
-grid = generate_grid(Triangle, (10, 10))
+grid = generate_grid(Triangle, (10, 10), Vec{2}((0.0, 0.0)), Vec{2}((2π, 0.0)), Vec{2}((2π, 2.0)), Vec{2}((0.0, 2.0)))
+# grid = generate_grid(Triangle, (10, 10));
 
 # Combine the interpolation and the quadrature rule to CellValues
-ip = Lagrange{RefTriangle, 1}()
-qr = QuadratureRule{RefTriangle}(4)
-qr_facet = FacetQuadratureRule{RefTriangle}(2)
-cv = CellValues(qr, ip)
-fv = FacetValues(qr_facet, ip)
+ip = Lagrange{RefTriangle, 1}();
+qr = QuadratureRule{RefTriangle}(2);
+qr_facet = FacetQuadratureRule{RefTriangle}(12);
+cv = CellValues(qr, ip);
+fv = FacetValues(qr_facet, ip);
 
 # Define a DofHandler
-dh = DofHandler(grid)
-add!(dh, :u, ip)
-close!(dh)
+dh = DofHandler(grid);
+add!(dh, :u, ip);
+close!(dh);
 
 # Extract the dofs which are associated to the DtN map
 dofsDtN = dofs_on_dtn(dh, :u, getfacetset(grid, "top"))
-Θ = sparsevec(dofsDtN, zeros(ComplexF64, length(dofsDtN)))
+Θ = sparsevec(dofsDtN, zeros(ComplexF64, length(dofsDtN)));
 
 # Compute Θⁿ for n = 1
 # Allocate the local vector θ
-n = getnbasefunctions(fv)
-θ = zeros(ComplexF64, n)
+n = getnbasefunctions(fv);
+θ = zeros(ComplexF64, n);
 for facet in FacetIterator(dh, getfacetset(grid, "top"))
     # Update the fv to the correct facet
     reinit!(fv, facet)
@@ -46,7 +47,7 @@ for facet in FacetIterator(dh, getfacetset(grid, "top"))
     for qp in 1:getnquadpoints(fv)
         ds = getdetJdV(fv, qp)
         coords_qp = spatial_coordinate(fv, qp, coords) # Coordinate of the quadrature point
-        mode = exp(im*coords_qp[1])
+        mode = exp(im * coords_qp[1])
         for i in 1:getnbasefunctions(fv)
             ϕ = shape_value(fv, qp, i)
             θ[i] += ϕ * mode * ds
