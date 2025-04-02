@@ -29,7 +29,7 @@ function beta_n(inc::Incident, n)
     if k > abs(αₙ) 
         βₙ = Complex(sqrt(k^2 - αₙ^2))
     else
-        βₙ = sqrt(αₙ^2 - k^2)
+        βₙ = im * sqrt(αₙ^2 - k^2)
     end
     
     return βₙ
@@ -237,13 +237,12 @@ function assemble_tbc(fv::FacetValues, dh::DofHandler, inc::Incident, facetset, 
         
         # 
         for i in Θ.nzind, j in Θ.nzind
-            @show (i, j)
-            v = βₙ * Θ[i] * conj(Θ[j])
+            v = im * βₙ * Θ[i] * conj(Θ[j])/(2π)
             Ferrite.addindex!(F, v, i, j)
         end
     end
     
-    F .*= im/(2π)
+    # F .*= im/(2π)
     
     return F
 end
@@ -287,4 +286,12 @@ function compute_coef!(fv::FacetValues, dh::DofHandler, facetset, Θ::SparseVect
     end
     
     return Θ
+end
+
+function sub_preserve_structure(A::SparseMatrixCSC, B::SparseMatrixCSC)
+    if A.colptr != B.colptr || A.rowval != B.rowval || size(A) != size(B)
+        error("Matrices must have the same sparsity structure and dimensions.")
+    end
+    new_nzval = A.nzval - B.nzval
+    return SparseMatrixCSC(size(A,1), size(A,2), A.colptr, A.rowval, new_nzval)
 end
