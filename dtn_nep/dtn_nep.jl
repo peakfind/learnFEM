@@ -1,6 +1,8 @@
 using Ferrite
 # reuse some functions
-using Nmrc: periodic_cell, setup_vals, setup_dh, setup_bcs, dofs_on_dtn, allocate_stiff_matrix
+using Nmrc: periodic_cell, setup_vals, setup_dh, setup_bcs, dofs_on_dtn, allocate_stiff_matrix, compute_coef!
+using Cim
+using LinearAlgebra
 using SparseArrays
 
 include("snippets.jl")
@@ -37,7 +39,7 @@ dofsDtN = dofs_on_dtn(dh, :u, top)
 A₀ = allocate_stiff_matrix(dh, cst, dofsDtN)
 A₁ = allocate_stiff_matrix(dh, cst, dofsDtN)
 A₂ = allocate_stiff_matrix(dh, cst, dofsDtN)
-
+size(A₀, 2)
 # Assemble A₀, A₁, A₂
 A₀ = assemble_A0(cv, dh, A₀, medium, k)
 A₁ = assemble_A1(cv, dh, A₁)
@@ -48,7 +50,11 @@ apply!(A₀, cst)
 apply!(A₁, cst)
 apply!(A₂, cst)
 
-# Construct the quadratic part of the nonlinear eigenvalue problem
-T = Nep(A₀, A₁, A₂)
+d = size(A₀, 1)
 
-T(1.0)
+# Construct the nonlinear eigenvalue problem
+L = Nnep(A₀, A₁, A₂, fv, dh, cst, top, dofsDtN, N, k);
+
+# Define the contour 
+elp = Cim.ellipse([0.38, 0.0], 0.01, 0.01)
+λ = cim(elp, L, d, 10; n=30, tol=1e-16)
