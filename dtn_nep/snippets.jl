@@ -1,164 +1,3 @@
-#----------------------------------------------------------
-# Finite element discretization
-#----------------------------------------------------------
-
-"""
-    assemble_A0(cv::CellValues, dh::DofHandler, A₀::SparseMatrixCSC, medium::Function, k)
-
-Assemble the zero order term ``\\mathbf{A}_{0}`` in the Nonlinear eigenvalue problem.
-
-``(\\mathbf{A}_{0} + \\alpha \\mathbf{A}_{1} + \\alpha^2 \\mathbf{A}_{2} + \\mathbf{F}(\\alpha)) \\mathbf{u} = 0.``
-
-# Argument
-
-- `cv`: CellValues (a notion in Ferrite.jl)
-- `dh`: DofHandler (a notion in Ferrite.jl)
-- `A₀`: an empty sparse pattern for A₀
-- `medium`: refractive index function which describes the properties of the medium
-- `k`: positive wavenumber
-"""
-function assemble_A0(cv::CellValues, dh::DofHandler, A₀::SparseMatrixCSC, medium::Function, k)
-    # Allocate the local matrix
-    n_basefuncs = getnbasefunctions(cv)
-    Ae = zeros(ComplexF64, n_basefuncs, n_basefuncs)
-    
-    # Create an assembler A₀ 
-    assembler = start_assemble(A₀)
-    
-    # Loop over all cells
-    for cell in CellIterator(dh)
-        # Reinitialize cellvalues for this cell
-        reinit!(cv, cell)
-
-        # Reset local stiffness matrix to 0.0 + 0.0im
-        fill!(Ae, 0.0 + 0.0im)
-        coords = getcoordinates(cell)
-        
-        # Loop over quadrature points
-        for qp in 1:getnquadpoints(cv)
-            dx = getdetJdV(cv, qp)
-            coords_qp = spatial_coordinate(cv, qp, coords)
-            n = medium(coords_qp)
-            
-            # Loop over test shape functions 
-            for i in 1:n_basefuncs
-                v = shape_value(cv, qp, i)
-                ∇v = shape_gradient(cv, qp, i)
-
-                # Loop over trial shape functions 
-                for j in 1:n_basefuncs
-                    u = shape_value(cv, qp, j)
-                    ∇u = shape_gradient(cv, qp, j)
-                    
-                    # Assemble local stiffness matrix
-                    Ae[i, j] += (∇u[1] * ∇v[1] + ∇u[2] * ∇v[1] - (k^2) * n * u * v) * dx
-                end
-            end
-        end
-        
-        # Assemble Ae into A₀ 
-        assemble!(assembler, celldofs(cell), Ae)
-    end
-    
-    return A₀
-end
-
-"""
-    assemble_A1(cv::CellValues, dh::DofHandler, A₁::SparseMatrixCSC)
-
-Assemble the first order term ``\\mathbf{A}_{1}`` in the Nonlinear eigenvalue problem.
-
-`` (\\mathbf{A}_{0} + \\alpha \\mathbf{A}_{1} + \\alpha^2 \\mathbf{A}_{2} + \\mathbf{F}(\\alpha)) \\mathbf{u} = 0. ``
-"""
-function assemble_A1(cv::CellValues, dh::DofHandler, A₁::SparseMatrixCSC)
-    # Allocate the local stiffness matrix 
-    n_basefuncs = getnbasefunctions(cv)
-    Ae = zeros(ComplexF64, n_basefuncs, n_basefuncs)
-
-    # Create an assembler 
-    assembler = start_assemble(A₁)
-    
-    # Loop over all cells
-    for cell in CellIterator(dh)
-        # Reinitialize cellvalues for this cell
-        reinit!(cv, cell)
-        
-        # Reset local stiffness matrix to 0.0 + 0.0im
-        fill!(Ae, 0.0 + 0.0im)
-        
-        # Loop over quadrature points 
-        for qp in 1:getnquadpoints(cv)
-            dx = getdetJdV(cv, qp)
-            
-            # Loop over test shape functions 
-            for i in 1:n_basefuncs 
-                v = shape_value(cv, qp, i)
-
-                # Loop over trial shape functions 
-                for j in 1:n_basefuncs
-                    ∇u = shape_gradient(cv, qp, j)
-                    
-                    # Assemble local stiffness matrix 
-                    Ae[i, j] += (-2im * ∇u[1] * v) * dx
-                end
-            end
-        end
-        
-        # Assemble Ae into A₁
-        assemble!(assembler, celldofs(cell), Ae)
-    end
-    
-    return A₁
-end
-
-"""
-    assemble_A2(cv::CellValues, dh::DofHandler, A₂::SparseMatrixCSC)
-
-Assemble the second order term in the Nonlinear eigenvalue problem.
-
-`` (\\mathbf{A}_{0} + \\alpha \\mathbf{A}_{1} + \\alpha^2 \\mathbf{A}_{2} + \\mathbf{F}(\\alpha)) \\mathbf{u} = 0. ``
-"""
-function assemble_A2(cv::CellValues, dh::DofHandler, A₂::SparseMatrixCSC)
-    # Allocate the local matrix
-    n_basefuncs = getnbasefunctions(cv)
-    Ae = zeros(ComplexF64, n_basefuncs, n_basefuncs)
-
-    # Create an assembler A₂
-    assembler = start_assemble(A₂)
-
-    # Loop over all cells 
-    for cell in CellIterator(dh)
-        # Reinitialize cellvalues for this cell 
-        reinit!(cv, cell)
-        
-        # Reset local stiffness matrix to 0.0 + 0.0im 
-        fill!(Ae, 0.0 + 0.0im)
-        
-        # Loop over quadrature points 
-        for qp in 1:getnquadpoints(cv)
-            dx = getdetJdV(cv, qp)
-            
-            # Loop over test shape functions 
-            for i in 1:n_basefuncs
-                v = shape_value(cv, qp, i)
-                
-                # Loop over trial shape functions 
-                for j in 1:n_basefuncs
-                    u = shape_value(cv, qp, j)
-                    
-                    # Assemble local stiffness matrix 
-                    Ae[i, j] += (u * v) * dx
-                end
-            end
-        end
-        
-        # Assemble Ae into A₂ 
-        assemble!(assembler, celldofs(cell), Ae)
-    end
-    
-    return A₂
-end 
-
 """
     assemble_tbc(fv::FacetValues, dh::DofHandler, F::SparseMatrixCSC, facetset, dofsDtN, N, k, α)
 
@@ -207,9 +46,6 @@ function beta_n(k, α, n)
     return βₙ
 end
 
-#----------------------------------------------------------
-# Nonlinear eigenvalue problem
-#----------------------------------------------------------
 """
     Nep
 
@@ -286,10 +122,9 @@ function (nep::Nnep{T})(α::T) where T
     apply!(F, nep.cst)
 
     return nep.A₀ + α * nep.A₁ + (α^2) * nep.A₂ + F
-    
 end
 
-function cim(ctr::Cim.AbstractContour, nep::Nnep, d::Int, l::Int; n=50, tol=1e-12)
+function new_cim(ctr::Cim.AbstractContour, nep::Nnep, d::Int, l::Int; n=50, tol=1e-12)
     # Input validation
     d > 0 || throw(ArgumentError("d must be positive"))
     l > 0 || throw(ArgumentError("l must be positive"))
@@ -300,21 +135,23 @@ function cim(ctr::Cim.AbstractContour, nep::Nnep, d::Int, l::Int; n=50, tol=1e-1
     # Preallocate arrays
     A0 = zeros(ComplexF64, d, l)
     A1 = zeros(ComplexF64, d, l)
+    Random.seed!(10);
     Vhat = randn(ComplexF64, d, l)
 
     # Compute A0 and A1 with trapezoid rule
-    for j in 1:pts.N
+    for j in 1:pts.N - 1
         z = complex(pts.nodes[j, 1], pts.nodes[j, 2])
         z_prime = complex(pts.nodes_prime[j, 1], pts.nodes_prime[j, 2])
         invNEP_Vhat = nep(z) \ Vhat
         A0 .+= invNEP_Vhat * z_prime
         A1 .+= invNEP_Vhat * z * z_prime
     end
-    A0 ./= (pts.N*im)
-    A1 ./= (pts.N*im)
+    A0 ./= (im * (pts.N - 1))
+    A1 ./= (im * (pts.N - 1))
 
     # Compute the SVD of A0
     (V, Sigma, W) = svd(A0)
+    @show Sigma
 
     # Handle rank deficiency
     if isempty(Sigma)
