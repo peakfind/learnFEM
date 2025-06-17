@@ -39,39 +39,42 @@ function assemble_tbc(fv::FacetValues, dh::DofHandler, F::SparseMatrixCSC, facet
     return F
 end
 
+"""
+    my_sqrt(z::Complex{T}) where T<:AbstractFloat
+
+Square root for complex numbers which takes the negative imaginary axis 
+as the branch cut.
+"""
+function my_sqrt(z::Complex{T}) where T<:AbstractFloat
+    # Handle special case of zero input
+    if z == zero(z)
+        return zero(z)
+    end
+    
+    # Rotate by -π/2 (multiply by -i)
+    rot_z = Complex(imag(z), -real(z))
+    
+    # Compute standard square root
+    sqrt_rot = sqrt(rot_z)
+    
+    # Rotate by π/4 (multiply by exp(im * π/4))
+    e = 1/sqrt(2)
+    r = (real(sqrt_rot) - imag(sqrt_rot)) * e
+    i = (real(sqrt_rot) + imag(sqrt_rot)) * e
+    result = Complex(r, i)
+    
+    return result
+end
+
+# Convenience method for other number types
+my_sqrt(z::Complex) = my_sqrt(float(z))
+
 function beta_n(k, α, n)
     αₙ = α + complex(n)
-    βₙ = sqrt(complex(k)^2 - αₙ^2)
+    # βₙ = sqrt(complex(k)^2 - αₙ^2)
+   βₙ = my_sqrt(complex(k)^2 - αₙ^2)
     
     return βₙ
-end
-
-"""
-    Nep
-
-Nep is used to store the matrices assocaited to the quadratic part.
-
-    (A₀ + α A₁ + α² A₂ + F(α))u = 0 
-"""
-struct Nep 
-    A₀::SparseMatrixCSC
-    A₁::SparseMatrixCSC
-    A₂::SparseMatrixCSC
-end
-
-# TODO: construct nonlinear eigenvalue problem u::Nep by u = Nep(A0, A1, A2)
-# TODO: function (L::Nep)(\alpha::Complex)
-
-"""
-    (nep::Nep)(α)
-
-TBW
-"""
-function (nep::Nep)(α)
-    # TODO:Generate TBC matrix F(α)
-
-    N = nep.A₀ + α * nep.A₁ + (α^2) * nep.A₂
-    return N
 end
 
 """
@@ -115,7 +118,7 @@ function (nep::Nnep{T})(α::T) where T
     # Allocate the TBC matrix
     F = allocate_stiff_matrix(nep.dh, nep.cst, nep.dofsDtN)
 
-    # TODO:Assemble the TBC matrix 
+    # Assemble the TBC matrix 
     F = assemble_tbc(nep.fv, nep.dh, F, nep.facetset, nep.dofsDtN, nep.N, nep.k, α)
     
     # Impose the boundary conditions

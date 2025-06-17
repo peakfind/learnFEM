@@ -9,23 +9,44 @@ using Random
 
 include("snippets.jl")
 
-# Wavenumber
-k = 4.1
+# Step 1: Choose the wavenumber and the refractive index.
+# Step 2: Generate the mesh.
+# Step 3: Define the contour. We need to choose the contour carefully.
+
+## Parameters
+
+# Wavenumber for the example 1
+k = 8.1
+
+# Wavenumber for the example 2
+# k = 4.1
 
 # The nb of the truncated terms
-N = 10
+N = 20
 
-# Refractive index
+# Refractive index for the example 1
 function medium(x)
+    n = 1.0
+
     if x[2] < 1.0
-        return 3.9
-    else
-        return 1.0
+        n = 3.0 + sin(2.0 * x[1])
     end
+    
+    return n
 end
 
+# Refractive index for the example 2
+# function medium(x)
+#     if x[2] < 1.0
+#         return 3.9
+#     else
+#         return 1.0
+#     end
+# end
+
 # Generate the mesh in a periodic cell
-grid = periodic_cell(lc=0.03, period=2π, height=2.0)
+# grid = periodic_cell(lc=0.03, period=2π, height=2.0) # coarser mesh
+grid = periodic_cell(lc=0.01, period=2π, height=2.0) # finer mesh
 
 # Set up fevalues(CellValues and FacetValues), DofHandler, and ConstraintHandler
 ip = Lagrange{RefTriangle, 1}()
@@ -57,10 +78,16 @@ d = size(A₀, 1)
 # Construct the nonlinear eigenvalue problem
 L = Nnep(A₀, A₁, A₂, fv, dh, cst, top, dofsDtN, N, k);
 
-# Define the contour 
-elp = Cim.circle([0.38, 0.0], 0.05)
+## Define the contour 
+# For the example 1
+elp = Cim.circle([0.36, 0.0], 0.05)
 
-# Solve the nonlinear eigenvalue problem by the Contour
-# integral method
-λ = new_cim(elp, L, d, 5; n=200, tol=0.9)
-@show λ
+# For the example 2
+# exceptional value ≈ 0.3803
+# elp = Cim.circle([0.38, 0.0], 0.02)
+
+# exceptional value ≈ 0.03
+# elp = Cim.circle([1.03, 0.0], 0.05)
+
+# Solve the nonlinear eigenvalue problem by the Contour integral method
+λ = new_cim(elp, L, d, 5; n=50, tol=0.5)
