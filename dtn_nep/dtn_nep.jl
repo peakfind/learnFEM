@@ -26,13 +26,12 @@ N = 20
 
 # Refractive index for the example 1
 function medium(x)
-    n = 1.0
-
-    if x[2] < 1.0
-        n = 3.0 + sin(2.0 * x[1])
-    end
-    
-    return n
+   n = 1.0
+   if x[2] < 1.0
+      n = 3.0 + sin(2.0 * x[1])
+   end
+  
+   return n
 end
 
 # Refractive index for the example 2
@@ -80,7 +79,7 @@ L = Nnep(A₀, A₁, A₂, fv, dh, cst, top, dofsDtN, N, k);
 
 ## Define the contour 
 # For the example 1
-elp = Cim.circle([0.36, 0.0], 0.05)
+elp = Cim.circle([0.34, 0.0], 0.02)
 
 # For the example 2
 # exceptional value ≈ 0.3803
@@ -90,4 +89,4 @@ elp = Cim.circle([0.36, 0.0], 0.05)
 # elp = Cim.circle([1.03, 0.0], 0.05)
 
 # Solve the nonlinear eigenvalue problem by the Contour integral method
-λ = new_cim(elp, L, d, 5; n=50, tol=0.5)
+λ, v = new_cim(elp, L, d, 5; n=50, tol=0.5)

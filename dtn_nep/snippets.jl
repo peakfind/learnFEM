@@ -173,11 +173,25 @@ function new_cim(ctr::Cim.AbstractContour, nep::Nnep, d::Int, l::Int; n=50, tol=
     # Diagonal is more efficient
     B = (Vk' * A1 * Wk) * Diagonal(1 ./ Sigk)
 
-    # Compute the eigenvalues of B 
-    lambda = eigvals(B)
+    # Compute the eigenvalues of λ and the corresponding eigenvectors s
+    λ, s = eigen(B)
 
-    # Avoid spurious eigenvalues
-    filter!(λ -> Cim.is_inside(λ, ctr), lambda)
+    # Avoid spurious eigenvalues, check if the eigenvalues 
+    # lies inside the contour
+    
+    # Store the indices of eigenvalues inside the contour
+    good = Int[]
+    
+    for i in eachindex(λ)
+        if Cim.is_inside(λ[i], ctr) == true
+            push!(good, i)
+        end
+    end
+    
+    # Extract the eigenvalues and the corresponding eigenvectors
+    λ = @view λ[good]
+    u = @view s[:, good]
+    u = Vk * u
 
-    return lambda
+    return λ, u
 end
