@@ -1,25 +1,29 @@
 using Gmsh
 
-lc = 0.5
-period = 2π
-ratio = 0.2
+# mesh size
+lc = 0.5 
 
-# Initialize gmsh 
+# size the periodic cell
+period = 2π 
+
+# radio between the radius of the rod and the cell
+ratio = 0.2 
+
+# Initialize gmsh
 gmsh.initialize()
 gmsh.option.setNumber("General.Verbosity", 2)
 
-# Get the radius
+# Get the radius 
 r = period * ratio
 
 # Add the points
-# For the square
 p1 = gmsh.model.geo.addPoint(period/2, -period/2, 0, lc)
 p2 = gmsh.model.geo.addPoint(period/2, period/2, 0, lc)
 p3 = gmsh.model.geo.addPoint(-period/2, period/2, 0, lc)
 p4 = gmsh.model.geo.addPoint(-period/2, -period/2, 0, lc)
 
 # For the circle
-p5 = gmsh.model.geo.addPoint(0, 0, 0, lc)
+p5 = gmsh.model.geo.addPoint(0, 0, 0, lc/2)
 p6 = gmsh.model.geo.addPoint(r, 0, 0, lc)
 p7 = gmsh.model.geo.addPoint(0, r, 0, lc)
 p8 = gmsh.model.geo.addPoint(-r, 0, 0, lc)
@@ -41,13 +45,15 @@ c4 = gmsh.model.geo.addCircleArc(p9, p5, p6)
 # Create the loops and the domain
 square = gmsh.model.geo.addCurveLoop([l1, l2, l3, l4])
 circle = gmsh.model.geo.addCurveLoop([c1, c2, c3, c4])
-domain = gmsh.model.geo.addPlaneSurface([square, circle])
+exterior = gmsh.model.geo.addPlaneSurface([square, circle])
+interior = gmsh.model.geo.addPlaneSurface([circle])
 
-# Synchronize the model
+
+# Synchronize the model 
 gmsh.model.geo.synchronize()
 
 # Generate a 2D mesh
 gmsh.model.mesh.generate(2)
 
-gmsh.write("column.vtk")
+gmsh.write("rod.vtk")
 gmsh.finalize()
